@@ -1,0 +1,34 @@
+/**
+ * Copyright (C) - All Rights Reserved
+ * Written by Noah Mattia Bussinger
+ */
+
+import { int, float } from "../definitions/utils.js";
+import { clear } from "./utils.js";
+
+export class RollingAverage {
+    private readonly sampleLength: int;
+    private readonly samples: float[];
+
+    private total: float = 0;
+    private cursor: float = 0;
+
+    public constructor(sampleLength: int = 60) {
+        this.samples = [];
+        this.sampleLength = sampleLength;
+    }
+
+    public sample(value: float): void {
+        this.total += value - (this.samples[this.cursor] || 0);
+        this.samples[this.cursor] = value;
+        this.cursor = (this.cursor + 1) % this.sampleLength;
+    }
+
+    public compute(): float {
+        return this.total / this.samples.length;
+    }
+
+    public destroy(): void {
+        clear(this.samples);
+    }
+}
