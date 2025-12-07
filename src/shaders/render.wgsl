@@ -3,6 +3,8 @@
  * Written by Noah Mattia Bussinger
  */
 
+enable primitive_index;
+
 struct Plane {
     normal: vec3f,
     distance: f32,
@@ -24,6 +26,8 @@ struct Camera {
 
 struct Uniforms {
     camera: Camera,
+    disable: u32,
+    debug: u32,
 };
 
 struct Mesh {
@@ -36,15 +40,22 @@ struct Vertex {
     position: vec3f,
 };
 
+/*
+struct Debugs {
+    tint: u32,
+};
+*/
+
 struct Result {
     @builtin(position) clipspace: vec4f,
-    @interpolate(flat) @location(0) color: vec4f,
+    @interpolate(flat) @location(0) color: vec3f,
 };
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var<storage, read> pending: array<u32>;
 @group(0) @binding(2) var<storage, read> meshes: array<Mesh>;
 @group(0) @binding(3) var<storage, read> vertices: array<Vertex>;
+//@group(1) @binding(0) var<uniform> debugs: Debugs;
 
 @vertex fn vs(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) instanceIndex: u32) -> Result {
     let camera: Camera = uniforms.camera;
@@ -52,12 +63,20 @@ struct Result {
     let vertex: Vertex = vertices[vertexIndex];
     let worldspace: vec3f = mesh.position + vertex.position;
     let clipspace: vec4f = camera.viewProjection * vec4f(worldspace, 1);
-    let color: vec4f = vec4f(random(f32(pending[instanceIndex])), 1);
+    let color: vec3f = random(f32(pending[instanceIndex]));
     return Result(clipspace, color);
 }
 
-@fragment fn fs(vertex: Result) -> @location(0) vec4f {    
-    return vertex.color;
+@fragment fn fs(@builtin(primitive_index) primitiveIndex: u32, vertex: Result) -> @location(0) vec4f {    
+    return vec4f(mix(vertex.color, random(f32(primitiveIndex)), 0.25), 1);
+    /*
+    switch debugs.tint {
+        case 0: { return vec4f(mix(vertex.color, random(f32(primitiveIndex)), 0.25), 1); }
+        case 1: { return vec4f(0, 0, 1, 1); }
+        case 2: { return vec4f(1, 1, 0, 1); }
+        default: { return vec4f(0, 0, 0, 1); }
+    }
+    */
 }
 
 fn random(value: f32) -> vec3f {

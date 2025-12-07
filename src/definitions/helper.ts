@@ -15,6 +15,7 @@ export const TextureFormats = {
 export const Requirements: GPUFeatureName[] = [
     "timestamp-query",
     "indirect-first-instance",
+    "primitive-index",
 ] as GPUFeatureName[];
 
 export const IndirectLayout: int = 5;

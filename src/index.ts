@@ -17,6 +17,7 @@ import { BYTES32, IndexFormat, UniformLayout } from "./definitions/index.js";
 import { float, int } from "./definitions/utils.js";
 import {
     baseLevelTexture,
+    beginDebugPass,
     beginDepthToHzbPass,
     beginFirstPass,
     beginRenderPass,
@@ -27,6 +28,10 @@ import {
     createColorTexture,
     createCommandEncoder,
     createContext,
+    createDebugBindGroup,
+    createDebugColorAttachment,
+    createDebugDepthAttachment,
+    createDebugPipeline,
     createDepthTexture,
     createDepthToHzbBindGroup,
     createDepthToHzbPipeline,
@@ -80,7 +85,7 @@ const torus: Geometry = await Geometry.FromPath("./resources/torus.obj");
 const wallx: Geometry = await Geometry.FromPath("./resources/wallx.obj");
 const wallz: Geometry = await Geometry.FromPath("./resources/wallz.obj");
 
-const _geometries: Geometry[] = [bunny, cube, suzanne, torus, wallx, wallz];
+const _geometries: Geometry[] = [cube, torus, bunny, suzanne, wallx, wallz];
 const geometries: Geometry[] = processGeometries(_geometries);
 const vertexBuffer: GPUBuffer = createVertexBuffer(geometries, device);
 const indexBuffer: GPUBuffer = createIndexBuffer(geometries, device);
@@ -106,21 +111,21 @@ const meshes: Mesh[] = processMeshes([...foobar]);
 */
 
 const foobar: Mesh[] = [];
+for (let i: int = 0; i < 2000; i++) {
+    const x: float = Math.random();
+    const y: float = 0.5 + 0.01 + Math.random() * 0.02;
+    const z: float = Math.random();
+    const _geos: Geometry[] = [/*cube, torus,*/ suzanne, bunny];
+    const geometry: Geometry = _geos[Math.floor(Math.random() * _geos.length)];
+    foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(160), geometry));
+}
 for (let i: int = 0; i < 100; i++) {
     const x: float = Math.random();
-    const y: float = Math.random() * 0.1 + 0.5;
-    const z: float = Math.random();
-    const _geos: Geometry[] = [cube, suzanne, torus, bunny];
-    const geometry: Geometry = _geos[Math.floor(Math.random() * _geos.length)];
-    foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(30), geometry));
-}
-for (let i: int = 0; i < 10; i++) {
-    const x: float = Math.random();
-    const y: float = 0.5;
+    const y: float = 0.5 + Math.random() * 0.01;
     const z: float = Math.random();
     const _geos: Geometry[] = [wallx, wallz];
     const geometry: Geometry = _geos[Math.floor(Math.random() * _geos.length)];
-    foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(30), geometry));
+    foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(180), geometry));
 }
 
 const meshes: Mesh[] = processMeshes([...foobar]);
@@ -145,17 +150,25 @@ const depthToHzbShader: GPUShaderModule = await createShader(
     device,
     "./src/shaders/depthToHzb.wgsl",
 );
+const debugShader: GPUShaderModule = await createShader(
+    device,
+    "./src/shaders/debug.wgsl",
+);
 
 /* Uniform and Indirects */
 
 const uniformDataBuffer: ArrayBuffer = new ArrayBuffer(UniformLayout * BYTES32);
 const uniformBuffer: GPUBuffer = createUniformBuffer(device);
-
 const indirectBuffer: GPUBuffer = createIndirectBuffer(
     geometries,
     meshes,
     device,
 );
+/*
+const debugs0Buffer: GPUBuffer = createDebugsBuffer(device, 0);
+const debugs1Buffer: GPUBuffer = createDebugsBuffer(device, 1);
+const debugs2Buffer: GPUBuffer = createDebugsBuffer(device, 2);
+*/
 
 /* Textures and Attachments */
 
@@ -171,6 +184,10 @@ const secondPassColorAttachment: GPURenderPassColorAttachment =
     createSecondPassColorAttachment(colorTexture);
 const secondPassDepthAttachment: GPURenderPassDepthStencilAttachment =
     createSecondPassDepthAttachment(depthTexture);
+const debugColorAttachment: GPURenderPassColorAttachment =
+    createDebugColorAttachment(colorTexture);
+const debugDepthAttachment: GPURenderPassDepthStencilAttachment =
+    createDebugDepthAttachment(depthTexture);
 
 /* Pipelines, Passes and BindGroups */
 
@@ -189,6 +206,11 @@ const renderPipeline: GPURenderPipeline = await createRenderPipeline(
 const depthToHzbPipeline: GPUComputePipeline = await createDepthToHzbPipeline(
     device,
     depthToHzbShader,
+);
+const debugPipeline: GPURenderPipeline = await createDebugPipeline(
+    device,
+    debugShader,
+    canvas,
 );
 
 const spdPipelinePass: SPDPass = createSpdPipelinePass(spd, device, hzbTexture);
@@ -234,6 +256,28 @@ const depthToHzbBindGroup: GPUBindGroup = createDepthToHzbBindGroup(
         createBinding(1, baseLevelTexture(hzbTexture)),
     ],
 );
+const debugBindGroup: GPUBindGroup = createDebugBindGroup(
+    device,
+    debugPipeline,
+    [createBinding(0, uniformBuffer), createBinding(1, hzbTexture)],
+);
+/*
+const debugs0BindGroup: GPUBindGroup = createDebugsBindGroup(
+    device,
+    renderPipeline,
+    [createBinding(0, debugs0Buffer)],
+);
+const debugs1BindGroup: GPUBindGroup = createDebugsBindGroup(
+    device,
+    renderPipeline,
+    [createBinding(0, debugs1Buffer)],
+);
+const debugs2BindGroup: GPUBindGroup = createDebugsBindGroup(
+    device,
+    renderPipeline,
+    [createBinding(0, debugs2Buffer)],
+);
+*/
 
 /* Run */
 
@@ -245,16 +289,13 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     statistics.update(time);
     controls.update();
     updateUniform(uniformDataBuffer, camera, device, uniformBuffer);
-    secondPassColorAttachment.resolveTarget = context.getCurrentTexture();
+
+    //secondPassColorAttachment.resolveTarget = context.getCurrentTexture();
+    debugColorAttachment.resolveTarget = context.getCurrentTexture();
 
     /* Encoder */
 
     const encoder: GPUCommandEncoder = createCommandEncoder(device);
-
-    //if ((window as any).freeze !== true) {
-    //if ((window as any).freeze === true) {
-    //    firstPassColorAttachment.resolveTarget = context.getCurrentTexture();
-    //}
 
     /* First Pass */
 
@@ -275,11 +316,10 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     );
     firstRenderPass.setPipeline(renderPipeline);
     firstRenderPass.setBindGroup(0, renderBindGroup);
+    //firstRenderPass.setBindGroup(1, debugs1BindGroup);
     firstRenderPass.setIndexBuffer(indexBuffer, IndexFormat);
     multiDrawIndexedIndirect(geometries, firstRenderPass, indirectBuffer);
     firstRenderPass.end();
-
-    //if ((window as any).freeze !== true) {
 
     /* HZB Passes */
 
@@ -298,29 +338,47 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
     /* Second Pass */
 
-    resetIndirectBuffer(geometries, encoder, indirectBuffer);
+    if ((window as any).freeze !== true) {
+        resetIndirectBuffer(geometries, encoder, indirectBuffer);
 
-    const secondPass: GPUComputePassEncoder = beginSecondPass(encoder);
-    secondPass.setPipeline(secondPassPipeline);
-    secondPass.setBindGroup(0, secondPassBindGroup);
-    secondPass.dispatchWorkgroups(
-        Math.max(1, Math.ceil(meshes.length / WORKGROUP_SIZE_1D)),
-    );
-    secondPass.end();
-
-    //}
-    //}
+        const secondPass: GPUComputePassEncoder = beginSecondPass(encoder);
+        secondPass.setPipeline(secondPassPipeline);
+        secondPass.setBindGroup(0, secondPassBindGroup);
+        secondPass.dispatchWorkgroups(
+            Math.max(1, Math.ceil(meshes.length / WORKGROUP_SIZE_1D)),
+        );
+        secondPass.end();
+    }
 
     const secondRenderPass: GPURenderPassEncoder = beginRenderPass(
         encoder,
         secondPassColorAttachment,
         secondPassDepthAttachment,
     );
-    secondRenderPass.setPipeline(renderPipeline);
-    secondRenderPass.setBindGroup(0, renderBindGroup);
-    secondRenderPass.setIndexBuffer(indexBuffer, IndexFormat);
-    multiDrawIndexedIndirect(geometries, secondRenderPass, indirectBuffer);
+    if ((window as any).freeze !== true) {
+        secondRenderPass.setPipeline(renderPipeline);
+        secondRenderPass.setBindGroup(0, renderBindGroup);
+        //secondRenderPass.setBindGroup(1, debugs2BindGroup);
+        secondRenderPass.setIndexBuffer(indexBuffer, IndexFormat);
+        multiDrawIndexedIndirect(geometries, secondRenderPass, indirectBuffer);
+    }
     secondRenderPass.end();
+
+    /* Debug Pass */
+
+    const debugPass: GPURenderPassEncoder = beginDebugPass(
+        encoder,
+        debugColorAttachment,
+        debugDepthAttachment,
+    );
+    if ((window as any).debug !== -1 && (window as any).freeze !== true) {
+        debugPass.setPipeline(debugPipeline);
+        debugPass.setBindGroup(0, debugBindGroup);
+        debugPass.draw(3, 1, 0, 0);
+    }
+    debugPass.end();
+
+    //todo timings and counts of different passes
 
     /* Submit */
 

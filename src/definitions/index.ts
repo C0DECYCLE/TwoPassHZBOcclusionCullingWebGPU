@@ -8,6 +8,6 @@ import { int } from "./utils.js";
 
 export const BYTES32: int = 4;
 
-export const UniformLayout: int = Camera.Layout;
+export const UniformLayout: int = Camera.Layout + 1 + 1 + 2;
 
 export const IndexFormat: GPUIndexFormat = "uint32";

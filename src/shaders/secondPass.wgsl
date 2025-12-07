@@ -24,6 +24,8 @@ struct Camera {
 
 struct Uniforms {
     camera: Camera,
+    disable: u32,
+    debug: u32,
 };
 
 struct Geometry {
@@ -67,23 +69,21 @@ override WORKGROUP_SIZE_1D: u32;
     let center: vec3f = geometry.center + mesh.position;
     let radius: f32 = geometry.radius;
     if (insideFrustum(camera.frustum, center, radius) == false) {
-        meshes[index].visible = 0; //
+        meshes[index].visible = 0;
         return;
     }
     let min: vec3f = geometry.min + mesh.position;
     let max: vec3f = geometry.max + mesh.position;
-    if (isOccluded(min, max) == true) {
-        meshes[index].visible = 0; //
+    if (uniforms.disable == 0 && isOccluded(min, max) == true) {
+        meshes[index].visible = 0;
         return;
     }
-    ///*
     if (mesh.visible == 1) {
         return;
     }
-    //*/
     let offset: u32 = atomicAdd(&indirects[mesh.geometry].instanceCount, 1);
     pending[indirects[mesh.geometry].firstInstance + offset] = index;
-    meshes[index].visible = 1; //
+    meshes[index].visible = 1;
 }
 
 fn insideFrustum(frustum: Frustum, center: vec3f, radius: f32) -> bool {
@@ -127,7 +127,7 @@ fn isOccluded(boundsMin: vec3f, boundsMax: vec3f) -> bool {
     let levelLower: u32 = max(0, level - 1);
     let lowerScale: vec2f = vec2f(exp2(-f32(levelLower)), exp2(-f32(levelLower)));
     let lowerSize: vec2f = ceil(screenMax * lowerScale) - floor(screenMin * lowerScale);
-    let finalLevel = select(level, levelLower, lowerSize.x <= 2 && lowerSize.y <= 2);
+    let finalLevel: u32 = level; //select(level, levelLower, lowerSize.x <= 2 && lowerSize.y <= 2);
     let levelSize: vec2u = textureDimensions(hzbTexture, finalLevel);
     let minX: u32 = clamp(u32(screenMin.x * f32(levelSize.x)), 0, levelSize.x - 1);
     let minY: u32 = clamp(u32(screenMin.y * f32(levelSize.y)), 0, levelSize.y - 1);

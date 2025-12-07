@@ -24,6 +24,8 @@ struct Camera {
 
 struct Uniforms {
     camera: Camera,
+    disable: u32,
+    debug: u32,
 };
 
 struct Geometry {
@@ -62,11 +64,9 @@ override WORKGROUP_SIZE_1D: u32;
     }
     let camera: Camera = uniforms.camera;
     let mesh: Mesh = meshes[index];
-    ///*
     if (mesh.visible == 0) {
         return;
     }
-    //*/
     let geometry: Geometry = geometries[mesh.geometry];
     let center: vec3f = geometry.center + mesh.position;
     let radius: f32 = geometry.radius;

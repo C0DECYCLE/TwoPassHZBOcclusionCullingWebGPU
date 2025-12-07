@@ -185,7 +185,7 @@ export function updateUniform(
     buffer: GPUBuffer,
 ): void {
     const dataFloats: Float32Array = new Float32Array(dataBuffer);
-    //const dataInts: Uint32Array = new Uint32Array(dataBuffer);
+    const dataInts: Uint32Array = new Uint32Array(dataBuffer);
     const viewProjection: Mat4 = camera.getViewProjection();
     const frustum: Frustum = new Frustum(viewProjection);
     viewProjection.store(dataFloats, 0);
@@ -202,6 +202,8 @@ export function updateUniform(
     dataFloats[frustumOffset + 4 * 3 + 3] = frustum.bottom.distance;
     dataFloats[frustumOffset + 4 * 4 + 3] = frustum.near.distance;
     dataFloats[frustumOffset + 4 * 5 + 3] = frustum.far.distance;
+    dataInts[Camera.Layout] = (window as any).disable === true ? 1 : 0;
+    dataInts[Camera.Layout + 1] = (window as any).debug ?? -1;
     device.queue.writeBuffer(buffer, 0, dataBuffer);
 }
 
@@ -246,6 +248,19 @@ export function createIndirectBuffer(
     device.queue.writeBuffer(buffer, 0, data.buffer);
     return buffer;
 }
+
+/*
+export function createDebugsBuffer(device: GPUDevice, tint: int): GPUBuffer {
+    const data: Uint32Array = new Uint32Array([tint]);
+    const buffer: GPUBuffer = device.createBuffer({
+        label: "debugsBuffer",
+        size: (1 + 3) * BYTES32,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    } as GPUBufferDescriptor);
+    device.queue.writeBuffer(buffer, 0, data.buffer);
+    return buffer;
+}
+*/
 
 export function resetIndirectBuffer(
     geometries: Geometry[],
@@ -345,6 +360,47 @@ export async function createDepthToHzbPipeline(
     } as GPUComputePipelineDescriptor);
 }
 
+export async function createDebugPipeline(
+    device: GPUDevice,
+    shader: GPUShaderModule,
+    canvas: HTMLCanvasElement,
+): Promise<GPURenderPipeline> {
+    const target: GPUColorTargetState = {
+        format: TextureFormats.canvas,
+        blend: BlendState,
+    } as GPUColorTargetState;
+    return await device.createRenderPipelineAsync({
+        label: "debugPipeline",
+        layout: "auto",
+        vertex: {
+            module: shader,
+            entryPoint: "vs",
+        } as GPUVertexState,
+        fragment: {
+            module: shader,
+            entryPoint: "fs",
+            constants: {
+                SCREEN_WIDTH: canvas.width,
+                SCREEN_HEIGHT: canvas.height,
+            } as Record<string, number>,
+            targets: [target],
+        } as GPUFragmentState,
+        primitive: {
+            topology: "triangle-list",
+            cullMode: "back",
+        } as GPUPrimitiveState,
+        depthStencil: {
+            depthWriteEnabled: false,
+            depthCompare: "less",
+            format: TextureFormats.depth,
+        } as GPUDepthStencilState,
+        multisample: {
+            count: MSAACount,
+            alphaToCoverageEnabled: false,
+        } as GPUMultisampleState,
+    } as GPURenderPipelineDescriptor);
+}
+
 export function createFirstPassBindGroup(
     device: GPUDevice,
     pipeline: GPUComputePipeline,
@@ -393,6 +449,32 @@ export function createDepthToHzbBindGroup(
     } as GPUBindGroupDescriptor);
 }
 
+export function createDebugBindGroup(
+    device: GPUDevice,
+    pipeline: GPURenderPipeline,
+    bindings: Iterable<GPUBindGroupEntry>,
+) {
+    return device.createBindGroup({
+        label: "debugBindGroup",
+        layout: pipeline.getBindGroupLayout(0),
+        entries: bindings,
+    } as GPUBindGroupDescriptor);
+}
+
+/*
+export function createDebugsBindGroup(
+    device: GPUDevice,
+    pipeline: GPURenderPipeline,
+    bindings: Iterable<GPUBindGroupEntry>,
+) {
+    return device.createBindGroup({
+        label: "debugsBindGroup",
+        layout: pipeline.getBindGroupLayout(1),
+        entries: bindings,
+    } as GPUBindGroupDescriptor);
+}
+*/
+
 export function baseLevelTexture(texture: GPUTexture): GPUTextureView {
     return texture.createView({
         baseMipLevel: 0,
@@ -402,7 +484,7 @@ export function baseLevelTexture(texture: GPUTexture): GPUTextureView {
 
 export function createBinding(
     index: int,
-    resource: GPUBuffer | GPUTexture | GPUTextureView,
+    resource: GPUBuffer | GPUTexture | GPUTextureView | GPUSampler,
 ): GPUBindGroupEntry {
     return {
         binding: index,
@@ -496,7 +578,7 @@ export function createSecondPassColorAttachment(
         //clearValue: Unnecessary, //clearValue: [...ClearColor.toArray(), 1],
         loadOp: "load", //loadOp: "clear",
         storeOp: "store",
-        //resolveTarget: Later
+        //resolveTarget: Legacy later
     } as GPURenderPassColorAttachment;
 }
 
@@ -508,6 +590,29 @@ export function createSecondPassDepthAttachment(
         view: texture,
         //depthClearValue: Unnecessary, //depthClearValue: 1,
         depthLoadOp: "load", //depthLoadOp: "clear",
+        depthStoreOp: "store",
+    } as GPURenderPassDepthStencilAttachment;
+}
+
+export function createDebugColorAttachment(
+    texture: GPUTexture,
+): GPURenderPassColorAttachment {
+    return {
+        label: "debugColorAttachment",
+        view: texture,
+        loadOp: "load",
+        storeOp: "store",
+        //resolveTarget: Later
+    } as GPURenderPassColorAttachment;
+}
+
+export function createDebugDepthAttachment(
+    texture: GPUTexture,
+): GPURenderPassDepthStencilAttachment {
+    return {
+        label: "debugDepthAttachment",
+        view: texture,
+        depthLoadOp: "load",
         depthStoreOp: "store",
     } as GPURenderPassDepthStencilAttachment;
 }
@@ -590,4 +695,16 @@ export function beginSpdPass(
     return encoder.beginComputePass({
         label: "spdPass",
     } as GPUComputePassDescriptor);
+}
+
+export function beginDebugPass(
+    encoder: GPUCommandEncoder,
+    color: GPURenderPassColorAttachment,
+    depth: GPURenderPassDepthStencilAttachment,
+): GPURenderPassEncoder {
+    return encoder.beginRenderPass({
+        label: "debugPass",
+        colorAttachments: [color],
+        depthStencilAttachment: depth,
+    } as GPURenderPassDescriptor);
 }
