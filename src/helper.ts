@@ -14,6 +14,7 @@ import {
 import { Camera } from "./components/Camera.js";
 import { Geometry } from "./components/Geometry.js";
 import { Mesh } from "./components/Mesh.js";
+import { GPUPassTimestampWrites } from "./definitions/components.js";
 import {
     BlendState,
     ClearColor,
@@ -27,8 +28,9 @@ import {
 import { BYTES32, UniformLayout } from "./definitions/index.js";
 import { int, Nullable } from "./definitions/utils.js";
 import { Frustum } from "./utilities/Frustum.js";
+import { log } from "./utilities/logger.js";
 import { Mat4 } from "./utilities/Mat4.js";
-import { assert } from "./utilities/utils.js";
+import { assert, dotit } from "./utilities/utils.js";
 
 export async function requestDevice(): Promise<GPUDevice> {
     const adapter: Nullable<GPUAdapter> = await navigator.gpu.requestAdapter();
@@ -225,17 +227,43 @@ export function createIndirectBuffer(
     let indexOffset: int = 0;
     let vertexOffset: int = 0;
     let instanceOffset: int = 0;
+    /* Debug */
+    let totalVertexCount: int = 0;
+    let totalPolygonCount: int = 0;
+    let totalMeshCount: int = 0;
     for (let i: int = 0; i < geometries.length; i++) {
         const geometry: Geometry = geometries[i];
-        data[i * IndirectLayout + 0] = geometry.indices.length;
+        const indexCount: int = geometry.indices.length;
+        const polygonCount: int = indexCount / 3;
+        const vertexCount: int =
+            geometry.vertices.length / Geometry.VertexLayout;
+        const meshCount: int = meshCounts[i];
+        data[i * IndirectLayout + 0] = indexCount;
         data[i * IndirectLayout + 1] = 0; // instanceCount
         data[i * IndirectLayout + 2] = indexOffset;
         data[i * IndirectLayout + 3] = vertexOffset;
         data[i * IndirectLayout + 4] = instanceOffset;
-        indexOffset += geometry.indices.length;
-        vertexOffset += geometry.vertices.length / Geometry.VertexLayout;
-        instanceOffset += meshCounts[i];
+        indexOffset += indexCount;
+        vertexOffset += vertexCount;
+        instanceOffset += meshCount;
+        /* Debug */
+        log(
+            "Geometry: " + geometry.id + ",",
+            "Vertices: " + dotit(vertexCount) + ",",
+            "Polygons: " + dotit(polygonCount) + ",",
+            "Meshes: " + dotit(meshCount),
+        );
+        totalVertexCount += vertexCount * meshCount;
+        totalPolygonCount += polygonCount * meshCount;
+        totalMeshCount += meshCount;
     }
+    /* Debug */
+    log("---------------------------------------------------------");
+    log(
+        "Vertices: " + dotit(totalVertexCount) + ",",
+        "Polygons: " + dotit(totalPolygonCount) + ",",
+        "Meshes: " + dotit(totalMeshCount),
+    );
     const buffer: GPUBuffer = device.createBuffer({
         label: "indirectBuffer",
         size: data.byteLength,
@@ -625,17 +653,21 @@ export function createCommandEncoder(device: GPUDevice): GPUCommandEncoder {
 
 export function beginFirstPass(
     encoder: GPUCommandEncoder,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPUComputePassEncoder {
     return encoder.beginComputePass({
         label: "firstPass",
+        timestampWrites: timestampWrites,
     } as GPUComputePassDescriptor);
 }
 
 export function beginSecondPass(
     encoder: GPUCommandEncoder,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPUComputePassEncoder {
     return encoder.beginComputePass({
         label: "secondPass",
+        timestampWrites: timestampWrites,
     } as GPUComputePassDescriptor);
 }
 
@@ -643,19 +675,23 @@ export function beginRenderPass(
     encoder: GPUCommandEncoder,
     color: GPURenderPassColorAttachment,
     depth: GPURenderPassDepthStencilAttachment,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPURenderPassEncoder {
     return encoder.beginRenderPass({
         label: "renderPass",
         colorAttachments: [color],
         depthStencilAttachment: depth,
+        timestampWrites: timestampWrites,
     } as GPURenderPassDescriptor);
 }
 
 export function beginDepthToHzbPass(
     encoder: GPUCommandEncoder,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPUComputePassEncoder {
     return encoder.beginComputePass({
         label: "depthToHzbPass",
+        timestampWrites: timestampWrites,
     } as GPUComputePassDescriptor);
 }
 
@@ -691,9 +727,11 @@ export function createSpdPipelinePass(
 
 export function beginSpdPass(
     encoder: GPUCommandEncoder,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPUComputePassEncoder {
     return encoder.beginComputePass({
         label: "spdPass",
+        timestampWrites: timestampWrites,
     } as GPUComputePassDescriptor);
 }
 
@@ -701,10 +739,12 @@ export function beginDebugPass(
     encoder: GPUCommandEncoder,
     color: GPURenderPassColorAttachment,
     depth: GPURenderPassDepthStencilAttachment,
+    timestampWrites: GPUPassTimestampWrites,
 ): GPURenderPassEncoder {
     return encoder.beginRenderPass({
         label: "debugPass",
         colorAttachments: [color],
         depthStencilAttachment: depth,
+        timestampWrites: timestampWrites,
     } as GPURenderPassDescriptor);
 }

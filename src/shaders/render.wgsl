@@ -68,6 +68,7 @@ struct Result {
 }
 
 @fragment fn fs(@builtin(primitive_index) primitiveIndex: u32, vertex: Result) -> @location(0) vec4f {    
+    //return vec4f(0.5, 0, 0, 0.25);
     return vec4f(mix(vertex.color, random(f32(primitiveIndex)), 0.25), 1);
     /*
     switch debugs.tint {

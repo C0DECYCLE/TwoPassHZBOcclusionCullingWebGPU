@@ -57,4 +57,6 @@ override SCREEN_HEIGHT: f32;
     let r: f32 = select(0.0, 1.0, cut);
     let a: f32 = select(0.0, 0.5, cut);
     return vec4f(r, 0, 0, a);
+    //let v: f32 = pow(depth, 10);
+    //return vec4f(v, v, v, 1);
 }

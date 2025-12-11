@@ -3,15 +3,21 @@
  * Written by Noah Mattia Bussinger
  */
 
-import { int, float, Nullable } from "../definitions/utils.js";
+import {
+    GPUPassTimestampWrites,
+    Timestamps,
+} from "../definitions/components.js";
+import { float, int, Nullable } from "../definitions/utils.js";
+import { warn } from "../utilities/logger.js";
 import { RollingAverage } from "../utilities/RollingAverage.js";
-import { assert, dotit, msToFps } from "../utilities/utils.js";
+import { assert, dotit, left, msToFps, right } from "../utilities/utils.js";
 import { Vec2 } from "../utilities/Vec2.js";
+import { TimingQuery } from "./TimingQuery.js";
 
 export class Statistics {
     private static readonly FontSize: int = Math.min(
         Math.floor(document.body.clientHeight * 0.02),
-        10,
+        12,
     );
 
     private readonly canvas: HTMLCanvasElement;
@@ -19,12 +25,14 @@ export class Statistics {
 
     private readonly cache: Map<string, float>;
     private readonly averages: Map<string, RollingAverage>;
+    private readonly timingQuery: TimingQuery;
 
-    public constructor() {
+    public constructor(device: GPUDevice) {
         this.canvas = this.createCanvas();
         this.context = this.createContext();
         this.cache = new Map<string, float>();
         this.averages = this.createAverages();
+        this.timingQuery = new TimingQuery(device, 7);
         document.body.appendChild(this.canvas);
     }
 
@@ -32,7 +40,7 @@ export class Statistics {
         const canvas: HTMLCanvasElement = document.createElement("canvas");
         canvas.style.position = "absolute";
         canvas.style.top = "env(safe-area-inset-top)";
-        canvas.style.left = "env(safe-area-inset-left)";
+        canvas.style.right = "env(safe-area-inset-left)";
         canvas.style.backgroundColor = "#000000";
         canvas.style.opacity = "0.75";
         return canvas;
@@ -51,6 +59,14 @@ export class Statistics {
             RollingAverage
         >();
         averages.set("time", new RollingAverage());
+        averages.set("gpu0", new RollingAverage());
+        averages.set("gpu1", new RollingAverage());
+        averages.set("gpu2", new RollingAverage());
+        averages.set("gpu3", new RollingAverage());
+        averages.set("gpu4", new RollingAverage());
+        averages.set("gpu5", new RollingAverage());
+        averages.set("gpu6", new RollingAverage());
+        averages.set("total", new RollingAverage());
         return averages;
     }
 
@@ -59,11 +75,15 @@ export class Statistics {
         const average: Nullable<RollingAverage> =
             this.averages.get(key) ?? null;
         assert(average);
+        if (value < 0) {
+            warn("Negative sample!");
+            return value;
+        }
         average.sample(value);
         return value;
     }
 
-    private computeAverage(key: string): float {
+    private getAverage(key: string): float {
         assert(this.averages.has(key));
         const average: Nullable<RollingAverage> =
             this.averages.get(key) ?? null;
@@ -71,22 +91,70 @@ export class Statistics {
         return average.compute();
     }
 
-    public update(time: DOMHighResTimeStamp): void {
+    public getTimestampWrites(index: int): GPUPassTimestampWrites {
+        return this.timingQuery.getTimestampWrites(index);
+    }
+
+    public encode(encoder: GPUCommandEncoder): void {
+        this.timingQuery.resolve(encoder);
+    }
+
+    public async update(time: DOMHighResTimeStamp): Promise<void> {
+        this.sampleTime(time);
+        await this.sampleGPU();
+        const fps: string = msToFps(this.getAverage("time"));
+        this.draw(`
+            \bTotal     ${right(fps, 8)} fps
+            CPU       ${right(dotit(this.getAverage("time").toFixed(2)), 9)} ms
+            GPU       ${right(dotit(this.getAverage("total").toFixed(2)), 9)} ms
+
+            \b${left("First", 22, "-")}
+            Cull      ${right(dotit(this.getAverage("gpu0").toFixed(2)), 9)} ms
+            Rasterize ${right(dotit(this.getAverage("gpu1").toFixed(2)), 9)} ms
+
+            \b${left("HZB", 22, "-")}
+            Convert   ${right(dotit(this.getAverage("gpu2").toFixed(2)), 9)} ms
+            SPD       ${right(dotit(this.getAverage("gpu3").toFixed(2)), 9)} ms
+
+            \b${left("Second", 22, "-")}
+            Cull      ${right(dotit(this.getAverage("gpu4").toFixed(2)), 9)} ms
+            Rasterize ${right(dotit(this.getAverage("gpu5").toFixed(2)), 9)} ms
+
+            \b${left("Debug", 22, "-")}
+            Rasterize ${right(dotit(this.getAverage("gpu6").toFixed(2)), 9)} ms
+        `);
+    }
+
+    private sampleTime(time: DOMHighResTimeStamp): void {
         this.sampleAverage("time", time - (this.cache.get("time") || 0));
         this.cache.set("time", time);
-        const delta: float = this.computeAverage("time");
-        this.draw(`
-            ${msToFps(delta)} fps (${dotit(delta.toFixed(2))} ms)
-        `);
+    }
+
+    private async sampleGPU(): Promise<void> {
+        const timestamps: Nullable<Timestamps[]> =
+            await this.timingQuery.readback();
+        if (!timestamps) {
+            return;
+        }
+        let min: float = Infinity;
+        let max: float = -Infinity;
+        for (let i: int = 0; i < timestamps.length; i++) {
+            const timestamp: Timestamps = timestamps[i];
+            assert(timestamp.start && timestamp.end);
+            this.sampleAverage(`gpu${i}`, timestamp.end - timestamp.start);
+            min = Math.min(min, timestamp.start);
+            max = Math.max(max, timestamp.end);
+        }
+        this.sampleAverage("total", max - min);
     }
 
     private draw(text: string): void {
         const fontSize: float = Statistics.FontSize * devicePixelRatio;
         const lines: string[] = text.split("\n");
-        const lineHeight: float = fontSize * 0.7;
+        const lineHeight: float = fontSize * 1.2;
         const size: Vec2 = new Vec2(
-            (18 + 4) * lineHeight,
-            (lines.length + 2) * lineHeight,
+            (12 + 2) * lineHeight,
+            (lines.length + 1) * lineHeight,
         );
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         this.canvas.width = size.x;
@@ -98,8 +166,8 @@ export class Statistics {
             let line: string = lines[i].trim();
             const bold: string = line[0] === "\b" ? "bold " : "";
             line = line.split("\b").at(-1)!;
-            this.context.font = `${bold}${fontSize}px system-ui`;
-            this.context.fillText(line, 2 * lineHeight, (2 + i) * lineHeight);
+            this.context.font = `${bold}${fontSize}px monospace`;
+            this.context.fillText(line, 1.5 * lineHeight, (1 + i) * lineHeight);
         }
     }
 }

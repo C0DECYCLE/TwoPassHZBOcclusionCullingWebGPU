@@ -124,9 +124,9 @@ fn isOccluded(boundsMin: vec3f, boundsMax: vec3f) -> bool {
     let size: vec2f = (screenMax - screenMin) * vec2f(baseSize);
     let levelMax: u32 = textureNumLevels(hzbTexture) - 1;
     let level: u32 = clamp(u32(ceil(log2(max(size.x, size.y)))), 0, levelMax);
-    let levelLower: u32 = max(0, level - 1);
-    let lowerScale: vec2f = vec2f(exp2(-f32(levelLower)), exp2(-f32(levelLower)));
-    let lowerSize: vec2f = ceil(screenMax * lowerScale) - floor(screenMin * lowerScale);
+    //let levelLower: u32 = max(0, level - 1);
+    //let lowerScale: vec2f = vec2f(exp2(-f32(levelLower)), exp2(-f32(levelLower)));
+    //let lowerSize: vec2f = ceil(screenMax * lowerScale) - floor(screenMin * lowerScale);
     let finalLevel: u32 = level; //select(level, levelLower, lowerSize.x <= 2 && lowerSize.y <= 2);
     let levelSize: vec2u = textureDimensions(hzbTexture, finalLevel);
     let minX: u32 = clamp(u32(screenMin.x * f32(levelSize.x)), 0, levelSize.x - 1);

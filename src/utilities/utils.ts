@@ -240,3 +240,15 @@ export function applyHsv(rgb: Vec3, hsv: Vec3): Vec3 {
     value.z *= hsv.z;
     return hsvToRgb(value);
 }
+
+function align(value: string, width: int, fill: string): string {
+    return fill.repeat(Math.max(0, width - value.length));
+}
+
+export function left(value: string, width: int, fill: string = " "): string {
+    return `${value}${align(value, width, fill)}`;
+}
+
+export function right(value: string, width: int, fill: string = " "): string {
+    return `${align(value, width, fill)}${value}`;
+}
