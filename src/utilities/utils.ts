@@ -252,3 +252,7 @@ export function left(value: string, width: int, fill: string = " "): string {
 export function right(value: string, width: int, fill: string = " "): string {
     return `${align(value, width, fill)}${value}`;
 }
+
+export function sum<T extends int | float>(value: T[]): T {
+    return value.reduce((result: T, v: T) => (result + v) as T, 0 as T);
+}

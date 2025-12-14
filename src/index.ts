@@ -73,7 +73,6 @@ const canvas: HTMLCanvasElement = createCanvas();
 const context: GPUCanvasContext = createContext(device, canvas);
 const camera: Camera = new Camera(canvas);
 const controls: Controls = new Controls(canvas, camera);
-const statistics: Statistics = new Statistics(device);
 const spd: WebGPUSinglePassDownsampler = createSpd(device);
 
 /* Geometries */
@@ -84,9 +83,9 @@ const bunny: Geometry = await Geometry.FromPath("./resources/bunny.obj");
 const suzanne: Geometry = await Geometry.FromPath("./resources/suzanne.obj");
 const wallx: Geometry = await Geometry.FromPath("./resources/wallx.obj");
 const wallz: Geometry = await Geometry.FromPath("./resources/wallz.obj");
-const floor: Geometry = await Geometry.FromPath("./resources/floor.obj");
+//const floor: Geometry = await Geometry.FromPath("./resources/floor.obj");
 
-const _geometries: Geometry[] = [bunny, suzanne, wallx, wallz, floor];
+const _geometries: Geometry[] = [bunny, suzanne, wallx, wallz /*floor*/];
 const geometries: Geometry[] = processGeometries(_geometries);
 const vertexBuffer: GPUBuffer = createVertexBuffer(geometries, device);
 const indexBuffer: GPUBuffer = createIndexBuffer(geometries, device);
@@ -281,6 +280,12 @@ const debugs2BindGroup: GPUBindGroup = createDebugsBindGroup(
 );
 */
 
+/* Statistics */
+
+const statistics: Statistics = new Statistics(device, indirectBuffer);
+
+/* Debug */
+
 (window as any).disable = false;
 (window as any).freeze = false;
 (window as any).debug = -1;
@@ -351,6 +356,10 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     spdPipelinePass.encode(spdPass);
     spdPass.end();
 
+    /* Statistics */
+
+    statistics.encodeMid(encoder);
+
     /* Second Pass */
 
     if ((window as any).freeze !== true) {
@@ -408,7 +417,7 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
     /* Statistics */
 
-    statistics.encode(encoder);
+    statistics.encodeEnd(encoder);
 
     /* Submit */
 

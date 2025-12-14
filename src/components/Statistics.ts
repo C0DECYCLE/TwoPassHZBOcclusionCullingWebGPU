@@ -10,8 +10,16 @@ import {
 import { float, int, Nullable } from "../definitions/utils.js";
 import { warn } from "../utilities/logger.js";
 import { RollingAverage } from "../utilities/RollingAverage.js";
-import { assert, dotit, left, msToFps, right } from "../utilities/utils.js";
+import {
+    assert,
+    dotit,
+    left,
+    msToFps,
+    right,
+    sum,
+} from "../utilities/utils.js";
 import { Vec2 } from "../utilities/Vec2.js";
+import { IndirectReadback } from "./IndirectReadback.js";
 import { TimingQuery } from "./TimingQuery.js";
 
 export class Statistics {
@@ -26,13 +34,15 @@ export class Statistics {
     private readonly cache: Map<string, float>;
     private readonly averages: Map<string, RollingAverage>;
     private readonly timingQuery: TimingQuery;
+    private readonly indirectReadback: IndirectReadback;
 
-    public constructor(device: GPUDevice) {
+    public constructor(device: GPUDevice, indirect: GPUBuffer) {
         this.canvas = this.createCanvas();
         this.context = this.createContext();
         this.cache = new Map<string, float>();
         this.averages = this.createAverages();
         this.timingQuery = new TimingQuery(device, 7);
+        this.indirectReadback = new IndirectReadback(device, indirect, 2);
         document.body.appendChild(this.canvas);
     }
 
@@ -67,6 +77,9 @@ export class Statistics {
         averages.set("gpu5", new RollingAverage());
         averages.set("gpu6", new RollingAverage());
         averages.set("total", new RollingAverage());
+        averages.set("indirect0", new RollingAverage());
+        averages.set("indirect1", new RollingAverage());
+        averages.set("meshes", new RollingAverage());
         return averages;
     }
 
@@ -95,22 +108,29 @@ export class Statistics {
         return this.timingQuery.getTimestampWrites(index);
     }
 
-    public encode(encoder: GPUCommandEncoder): void {
+    public encodeMid(encoder: GPUCommandEncoder): void {
+        this.indirectReadback.resolve(encoder, 0);
+    }
+
+    public encodeEnd(encoder: GPUCommandEncoder): void {
+        this.indirectReadback.resolve(encoder, 1);
         this.timingQuery.resolve(encoder);
     }
 
     public async update(time: DOMHighResTimeStamp): Promise<void> {
         this.sampleTime(time);
         await this.sampleGPU();
-        const fps: string = msToFps(this.getAverage("time"));
+        await this.sampleIndirect();
         this.draw(`
-            \bTotal     ${right(fps, 8)} fps
+            \bTotal     ${right(msToFps(this.getAverage("time")), 8)} fps
             CPU       ${right(dotit(this.getAverage("time").toFixed(2)), 9)} ms
             GPU       ${right(dotit(this.getAverage("total").toFixed(2)), 9)} ms
+            Meshes    ${right(dotit(this.getAverage("meshes")), 12)}
 
             \b${left("First", 22, "-")}
             Cull      ${right(dotit(this.getAverage("gpu0").toFixed(2)), 9)} ms
             Rasterize ${right(dotit(this.getAverage("gpu1").toFixed(2)), 9)} ms
+            Meshes    ${right(dotit(this.getAverage("indirect0")), 12)}
 
             \b${left("HZB", 22, "-")}
             Convert   ${right(dotit(this.getAverage("gpu2").toFixed(2)), 9)} ms
@@ -119,6 +139,7 @@ export class Statistics {
             \b${left("Second", 22, "-")}
             Cull      ${right(dotit(this.getAverage("gpu4").toFixed(2)), 9)} ms
             Rasterize ${right(dotit(this.getAverage("gpu5").toFixed(2)), 9)} ms
+            Meshes    ${right(dotit(this.getAverage("indirect1")), 12)}
 
             \b${left("Debug", 22, "-")}
             Rasterize ${right(dotit(this.getAverage("gpu6").toFixed(2)), 9)} ms
@@ -146,6 +167,22 @@ export class Statistics {
             max = Math.max(max, timestamp.end);
         }
         this.sampleAverage("total", max - min);
+    }
+
+    private async sampleIndirect(): Promise<void> {
+        const instanceCounts: Nullable<int[][]> =
+            await this.indirectReadback.readback();
+        if (!instanceCounts) {
+            return;
+        }
+        let meshes: int = 0;
+        for (let i: int = 0; i < instanceCounts.length; i++) {
+            const counts: int[] = instanceCounts[i];
+            const count: int = sum(counts);
+            this.sampleAverage(`indirect${i}`, count + 0);
+            meshes += count;
+        }
+        this.sampleAverage("meshes", meshes + 0);
     }
 
     private draw(text: string): void {

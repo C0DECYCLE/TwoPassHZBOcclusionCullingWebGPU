@@ -15,7 +15,7 @@ import { assert } from "../utilities/utils.js";
 export class TimingQuery {
     private static readonly Stride: int = 2;
 
-    public readonly capacity: int;
+    private readonly capacity: int;
 
     private readonly querySet: GPUQuerySet;
     private readonly queryBuffer: GPUBuffer;
@@ -93,7 +93,7 @@ export class TimingQuery {
             0,
             this.readbackBuffer,
             0,
-            this.readbackBuffer.size,
+            this.queryBuffer.size,
         );
     }
 
@@ -102,7 +102,7 @@ export class TimingQuery {
             return null;
         }
         await this.readbackBuffer.mapAsync(GPUMapMode.READ);
-        const data: ArrayBuffer = this.readbackBuffer.getMappedRange().slice(0); // unnecessary?
+        const data: ArrayBuffer = this.readbackBuffer.getMappedRange().slice();
         this.readbackBuffer.unmap();
         const nanos: BigInt64Array = new BigInt64Array(data);
         assert(nanos.length === this.capacity * TimingQuery.Stride);
