@@ -63,7 +63,8 @@ import {
     resetIndirectBuffer,
     updateUniform,
 } from "./helper.js";
-import { assert } from "./utilities/utils.js";
+import { log } from "./utilities/logger.js";
+import { assert, randomNumberGenerator } from "./utilities/utils.js";
 import { Vec3 } from "./utilities/Vec3.js";
 
 /* Initialize */
@@ -72,7 +73,7 @@ const device: GPUDevice = await requestDevice();
 const canvas: HTMLCanvasElement = createCanvas();
 const context: GPUCanvasContext = createContext(device, canvas);
 const camera: Camera = new Camera(canvas);
-const controls: Controls = new Controls(canvas, camera);
+//const controls: Controls = new Controls(canvas, camera);
 const spd: WebGPUSinglePassDownsampler = createSpd(device);
 
 /* Geometries */
@@ -112,20 +113,21 @@ const meshes: Mesh[] = processMeshes([...foobar]);
 
 const foobar: Mesh[] = [];
 //foobar.push(new Mesh(new Vec3(0, 0, 0), floor));
+const random: () => float = randomNumberGenerator();
 for (let i: int = 0; i < 2000; i++) {
-    const x: float = Math.random();
-    const y: float = 0.5 + 0.01 + Math.random() * 0.02;
-    const z: float = Math.random();
+    const x: float = random();
+    const y: float = 0.5 + 0.01 + random() * 0.02;
+    const z: float = random();
     const _geos: Geometry[] = [/*cube, torus,*/ suzanne, bunny];
-    const geometry: Geometry = _geos[Math.floor(Math.random() * _geos.length)];
+    const geometry: Geometry = _geos[Math.floor(random() * _geos.length)];
     foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(160), geometry));
 }
 for (let i: int = 0; i < 100; i++) {
-    const x: float = Math.random();
-    const y: float = 0.5 + Math.random() * 0.01;
-    const z: float = Math.random();
+    const x: float = random();
+    const y: float = 0.5 + random() * 0.01;
+    const z: float = random();
     const _geos: Geometry[] = [wallx, wallz];
-    const geometry: Geometry = _geos[Math.floor(Math.random() * _geos.length)];
+    const geometry: Geometry = _geos[Math.floor(random() * _geos.length)];
     foobar.push(new Mesh(new Vec3(x, y, z).sub(0.5).scale(180), geometry));
 }
 
@@ -291,13 +293,34 @@ const statistics: Statistics = new Statistics(device, indirectBuffer);
 (window as any).debug = -1;
 
 /* Run */
+const start: float = performance.now();
+let stopped: boolean = false;
+let previous: int = -1;
+log("start");
 
 function frameRequestCallback(time: DOMHighResTimeStamp): void {
     assert(device && context);
 
     /* Update */
 
-    controls.update();
+    //controls.update();
+    const elapsed: float = performance.now() - start;
+    const spin: float = Math.min(elapsed * 0.0005, Math.PI * 2);
+    if (spin >= Math.PI * 2) {
+        if (!stopped) {
+            log("stop");
+            stopped = true;
+        }
+    } else {
+        const second: int = Math.floor(elapsed / 1000);
+        if (second > previous) {
+            log(second);
+            previous = second;
+        }
+    }
+    camera.position.set(Math.sin(spin), 0, Math.cos(spin)).scale(10);
+    camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
+    camera.position.y += 2.5;
     updateUniform(uniformDataBuffer, camera, device, uniformBuffer);
 
     //secondPassColorAttachment.resolveTarget = context.getCurrentTexture();

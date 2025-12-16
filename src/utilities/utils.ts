@@ -256,3 +256,23 @@ export function right(value: string, width: int, fill: string = " "): string {
 export function sum<T extends int | float>(value: T[]): T {
     return value.reduce((result: T, v: T) => (result + v) as T, 0 as T);
 }
+
+export function randomNumberGenerator(seed: float = 38199.82654): () => float {
+    let x: float = 0;
+    let y: float = 0;
+    let z: float = 0;
+    let w: float = 0;
+    function next(): float {
+        const t: float = x ^ (x << 11);
+        x = y;
+        y = z;
+        z = w;
+        w ^= ((w >>> 19) ^ t ^ (t >>> 8)) >>> 0;
+        return w / 0x100000000 + 0.5;
+    }
+    for (let k: float = 0; k < seed.toString().length + 64; k++) {
+        x ^= seed.toString().charCodeAt(k) | 0;
+        next();
+    }
+    return next;
+}
