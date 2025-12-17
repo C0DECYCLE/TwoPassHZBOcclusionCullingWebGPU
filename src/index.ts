@@ -462,7 +462,7 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
                 const variant: string = (window as any).disable
                     ? "frustumOnly"
                     : "twoPass";
-                //exportCSV(formatCSV(csvData), `data_${variant}.csv`);
+                exportCSV(formatCSV(csvData), `data_${variant}.csv`);
                 exported = true;
             }
             return;

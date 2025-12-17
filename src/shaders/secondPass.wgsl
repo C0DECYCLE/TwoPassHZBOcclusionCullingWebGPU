@@ -121,7 +121,8 @@ fn isOccluded(boundsMin: vec3f, boundsMax: vec3f) -> bool {
         depthMin = min(depthMin, ndcspace.z);
     }
     let baseSize: vec2u = textureDimensions(hzbTexture, 0);
-    let size: vec2f = (screenMax - screenMin) * vec2f(baseSize);
+    let screenSize: vec2f = screenMax - screenMin;
+    let size: vec2f = screenSize * vec2f(baseSize);
     let levelMax: u32 = textureNumLevels(hzbTexture) - 1;
     let level: u32 = clamp(u32(ceil(log2(max(size.x, size.y)))), 0, levelMax);
     //let levelLower: u32 = max(0, level - 1);
@@ -138,5 +139,6 @@ fn isOccluded(boundsMin: vec3f, boundsMax: vec3f) -> bool {
     let depthLB: f32 = textureLoad(hzbTexture, vec2u(minX, maxY), finalLevel).r;
     let depthRB: f32 = textureLoad(hzbTexture, vec2u(maxX, maxY), finalLevel).r;
     let depthMax: f32 = max(max(depthLT, depthRT), max(depthLB, depthRB));
-    return depthMin > depthMax;
+    //return depthMin > depthMax;
+    return select(depthMin > depthMax, true, screenSize.x == 0 || screenSize.y == 0);
 }
