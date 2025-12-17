@@ -288,7 +288,7 @@ const statistics: Statistics = new Statistics(device, indirectBuffer);
 
 /* Debug */
 
-(window as any).disable = true;
+(window as any).disable = false;
 (window as any).freeze = false;
 (window as any).debug = -1;
 
@@ -462,7 +462,7 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
                 const variant: string = (window as any).disable
                     ? "frustumOnly"
                     : "twoPass";
-                exportCSV(formatCSV(csvData), `data_${variant}.csv`);
+                //exportCSV(formatCSV(csvData), `data_${variant}.csv`);
                 exported = true;
             }
             return;
