@@ -30,3 +30,11 @@ export type Timestamps = {
 };
 
 export const MsToNanos: int = 1_000_000;
+
+export type CSVItem = {
+    frameNumber: int;
+    gpuTime: float;
+    meshes: int;
+    first: int;
+    second: int;
+};

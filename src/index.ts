@@ -8,10 +8,10 @@ import {
     WebGPUSinglePassDownsampler,
 } from "../node_modules/webgpu-spd/dist/index.js";
 import { Camera } from "./components/Camera.js";
-import { Controls } from "./components/Controls.js";
 import { Geometry } from "./components/Geometry.js";
 import { Mesh } from "./components/Mesh.js";
 import { Statistics } from "./components/Statistics.js";
+import { CSVItem } from "./definitions/components.js";
 import { WORKGROUP_SIZE_1D, WORKGROUP_SIZE_2D } from "./definitions/helper.js";
 import { BYTES32, IndexFormat, UniformLayout } from "./definitions/index.js";
 import { float, int } from "./definitions/utils.js";
@@ -77,14 +77,14 @@ const camera: Camera = new Camera(canvas);
 const spd: WebGPUSinglePassDownsampler = createSpd(device);
 
 /* Geometries */
-
-//const cube: Geometry = await Geometry.FromPath("./resources/cube.obj");
-//const torus: Geometry = await Geometry.FromPath("./resources/torus.obj");
-const bunny: Geometry = await Geometry.FromPath("./resources/bunny.obj");
-const suzanne: Geometry = await Geometry.FromPath("./resources/suzanne.obj");
-const wallx: Geometry = await Geometry.FromPath("./resources/wallx.obj");
-const wallz: Geometry = await Geometry.FromPath("./resources/wallz.obj");
-//const floor: Geometry = await Geometry.FromPath("./resources/floor.obj");
+const dir: string = "./resources/geometries/";
+//const cube: Geometry = await Geometry.FromPath(`${dir}cube.obj`);
+//const torus: Geometry = await Geometry.FromPath(`${dir}torus.obj`);
+const bunny: Geometry = await Geometry.FromPath(`${dir}bunny.obj`);
+const suzanne: Geometry = await Geometry.FromPath(`${dir}suzanne.obj`);
+const wallx: Geometry = await Geometry.FromPath(`${dir}wallx.obj`);
+const wallz: Geometry = await Geometry.FromPath(`${dir}wallz.obj`);
+//const floor: Geometry = await Geometry.FromPath(`${dir}floor.obj`);
 
 const _geometries: Geometry[] = [bunny, suzanne, wallx, wallz /*floor*/];
 const geometries: Geometry[] = processGeometries(_geometries);
@@ -288,15 +288,16 @@ const statistics: Statistics = new Statistics(device, indirectBuffer);
 
 /* Debug */
 
-(window as any).disable = false;
+(window as any).disable = true;
 (window as any).freeze = false;
 (window as any).debug = -1;
 
 /* Run */
-const start: float = performance.now();
+const csvData: CSVItem[] = [];
+let started: boolean = false;
 let stopped: boolean = false;
-let previous: int = -1;
-log("start");
+let exported: boolean = false;
+let start: float = -1;
 
 function frameRequestCallback(time: DOMHighResTimeStamp): void {
     assert(device && context);
@@ -304,23 +305,30 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     /* Update */
 
     //controls.update();
-    const elapsed: float = performance.now() - start;
-    const spin: float = Math.min(elapsed * 0.0005, Math.PI * 2);
-    if (spin >= Math.PI * 2) {
-        if (!stopped) {
-            log("stop");
-            stopped = true;
-        }
-    } else {
-        const second: int = Math.floor(elapsed / 1000);
-        if (second > previous) {
-            log(second);
-            previous = second;
+    camera.position.set(Math.sin(0), 0, Math.cos(0)).scale(20);
+    camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
+    camera.position.y = 2.5;
+    if (time > 2000) {
+        if (!started) {
+            start = performance.now();
+            log("start");
+            started = true;
         }
     }
-    camera.position.set(Math.sin(spin), 0, Math.cos(spin)).scale(10);
-    camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
-    camera.position.y += 2.5;
+    let elapsed: float = -1;
+    if (started) {
+        elapsed = performance.now() - start;
+        const spin: float = Math.min(elapsed * 0.0003, Math.PI * 2);
+        if (spin >= Math.PI * 2) {
+            if (!stopped) {
+                log("stop");
+                stopped = true;
+            }
+        }
+        camera.position.set(Math.sin(spin), 0, Math.cos(spin)).scale(20);
+        camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
+        camera.position.y = 2.5;
+    }
     updateUniform(uniformDataBuffer, camera, device, uniformBuffer);
 
     //secondPassColorAttachment.resolveTarget = context.getCurrentTexture();
@@ -448,7 +456,21 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
     /* Statistics */
 
-    statistics.update(time);
+    statistics.update(elapsed, time).then((item: CSVItem) => {
+        if (stopped) {
+            if (!exported) {
+                const variant: string = (window as any).disable
+                    ? "frustumOnly"
+                    : "twoPass";
+                exportCSV(formatCSV(csvData), `data_${variant}.csv`);
+                exported = true;
+            }
+            return;
+        }
+        if (started) {
+            csvData.push(item);
+        }
+    });
 
     /* Rerun */
 
@@ -457,4 +479,29 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
 requestAnimationFrame(frameRequestCallback);
 
-// readback mesh counts
+function formatCSV(data: CSVItem[]): string {
+    if (data.length === 0) {
+        return "";
+    }
+    const headers: string[] = Object.keys(data[0]);
+    const rows: string[] = data.map((item: CSVItem) =>
+        // @ts-ignore
+        headers.map((h: string) => String(item[h] ?? "")).join(","),
+    );
+    return [headers.join(","), ...rows].join("\n");
+}
+
+function exportCSV(csv: string, filename: string): void {
+    const blob: Blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+    } as BlobPropertyBag);
+    const url: string = URL.createObjectURL(blob);
+    const link: HTMLAnchorElement = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}

@@ -25,7 +25,7 @@ export class RollingAverage {
     }
 
     public compute(): float {
-        return this.total / this.samples.length;
+        return this.total / this.samples.length || 0;
     }
 
     public destroy(): void {

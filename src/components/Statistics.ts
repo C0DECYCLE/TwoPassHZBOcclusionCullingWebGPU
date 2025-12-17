@@ -4,6 +4,7 @@
  */
 
 import {
+    CSVItem,
     GPUPassTimestampWrites,
     Timestamps,
 } from "../definitions/components.js";
@@ -117,10 +118,13 @@ export class Statistics {
         this.timingQuery.resolve(encoder);
     }
 
-    public async update(time: DOMHighResTimeStamp): Promise<void> {
+    public async update(
+        elapsed: float,
+        time: DOMHighResTimeStamp,
+    ): Promise<CSVItem> {
         this.sampleTime(time);
-        await this.sampleGPU();
-        await this.sampleIndirect();
+        const item0: CSVItem = await this.sampleGPU();
+        const item1: CSVItem = await this.sampleIndirect();
         this.draw(`
             \bTotal     ${right(msToFps(this.getAverage("time")), 8)} fps
             CPU       ${right(dotit(this.getAverage("time").toFixed(2)), 9)} ms
@@ -144,6 +148,14 @@ export class Statistics {
             \b${left("Debug", 22, "-")}
             Rasterize ${right(dotit(this.getAverage("gpu6").toFixed(2)), 9)} ms
         `);
+        const csvItem: CSVItem = {
+            frameNumber: Math.floor(elapsed / 50),
+            gpuTime: item0.gpuTime,
+            meshes: item1.meshes,
+            first: item1.first,
+            second: item1.second,
+        } as CSVItem;
+        return csvItem;
     }
 
     private sampleTime(time: DOMHighResTimeStamp): void {
@@ -151,11 +163,17 @@ export class Statistics {
         this.cache.set("time", time);
     }
 
-    private async sampleGPU(): Promise<void> {
+    private async sampleGPU(): Promise<CSVItem> {
         const timestamps: Nullable<Timestamps[]> =
             await this.timingQuery.readback();
         if (!timestamps) {
-            return;
+            return {
+                frameNumber: 0,
+                gpuTime: 0,
+                meshes: 0,
+                first: 0,
+                second: 0,
+            } as CSVItem;
         }
         let min: float = Infinity;
         let max: float = -Infinity;
@@ -167,13 +185,26 @@ export class Statistics {
             max = Math.max(max, timestamp.end);
         }
         this.sampleAverage("total", max - min);
+        return {
+            frameNumber: 0,
+            gpuTime: max - min,
+            meshes: 0,
+            first: 0,
+            second: 0,
+        } as CSVItem;
     }
 
-    private async sampleIndirect(): Promise<void> {
+    private async sampleIndirect(): Promise<CSVItem> {
         const instanceCounts: Nullable<int[][]> =
             await this.indirectReadback.readback();
         if (!instanceCounts) {
-            return;
+            return {
+                frameNumber: 0,
+                gpuTime: 0,
+                meshes: 0,
+                first: 0,
+                second: 0,
+            } as CSVItem;
         }
         let meshes: int = 0;
         for (let i: int = 0; i < instanceCounts.length; i++) {
@@ -183,6 +214,13 @@ export class Statistics {
             meshes += count;
         }
         this.sampleAverage("meshes", meshes + 0);
+        return {
+            frameNumber: 0,
+            gpuTime: 0,
+            meshes: meshes,
+            first: sum(instanceCounts[0]),
+            second: sum(instanceCounts[1]),
+        } as CSVItem;
     }
 
     private draw(text: string): void {

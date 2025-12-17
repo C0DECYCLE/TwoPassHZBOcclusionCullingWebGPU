@@ -68,7 +68,7 @@ override WORKGROUP_SIZE_1D: u32;
     let geometry: Geometry = geometries[mesh.geometry];
     let center: vec3f = geometry.center + mesh.position;
     let radius: f32 = geometry.radius;
-    if (insideFrustum(camera.frustum, center, radius) == false) {
+    if (/*uniforms.disable == 0 && */insideFrustum(camera.frustum, center, radius) == false) {
         meshes[index].visible = 0;
         return;
     }
