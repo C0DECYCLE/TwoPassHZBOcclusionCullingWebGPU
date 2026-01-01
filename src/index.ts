@@ -8,6 +8,7 @@ import {
     WebGPUSinglePassDownsampler,
 } from "../node_modules/webgpu-spd/dist/index.js";
 import { Camera } from "./components/Camera.js";
+import { Controls } from "./components/Controls.js";
 import { Geometry } from "./components/Geometry.js";
 import { Mesh } from "./components/Mesh.js";
 import { Statistics } from "./components/Statistics.js";
@@ -73,7 +74,7 @@ const device: GPUDevice = await requestDevice();
 const canvas: HTMLCanvasElement = createCanvas();
 const context: GPUCanvasContext = createContext(device, canvas);
 const camera: Camera = new Camera(canvas);
-//const controls: Controls = new Controls(canvas, camera);
+const controls: Controls = new Controls(canvas, camera);
 const spd: WebGPUSinglePassDownsampler = createSpd(device);
 
 /* Geometries */
@@ -304,7 +305,8 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
     /* Update */
 
-    //controls.update();
+    controls.update();
+    /*
     camera.position.set(Math.sin(0), 0, Math.cos(0)).scale(20);
     camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
     camera.position.y = 2.5;
@@ -314,8 +316,9 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
             log("start");
             started = true;
         }
-    }
+    }*/
     let elapsed: float = -1;
+    /*
     if (started) {
         elapsed = performance.now() - start;
         const spin: float = Math.min(elapsed * 0.0003, Math.PI * 2);
@@ -329,6 +332,7 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
         camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
         camera.position.y = 2.5;
     }
+    */
     updateUniform(uniformDataBuffer, camera, device, uniformBuffer);
 
     //secondPassColorAttachment.resolveTarget = context.getCurrentTexture();
