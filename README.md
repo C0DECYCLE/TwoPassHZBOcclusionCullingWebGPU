@@ -1,6 +1,6 @@
 # Two-Pass Hierarchical Z-Buffer Occlusion Culling in WebGPU
 
-### Install on MacOS
+### Setup on MacOS
 
 1. Run `npm install`.
 2. Run `npm run build`.
