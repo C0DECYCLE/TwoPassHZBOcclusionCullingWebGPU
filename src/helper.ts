@@ -14,7 +14,7 @@ import {
 import { Camera } from "./components/Camera.js";
 import { Geometry } from "./components/Geometry.js";
 import { Mesh } from "./components/Mesh.js";
-import { GPUPassTimestampWrites } from "./definitions/components.js";
+import { CSVItem, GPUPassTimestampWrites } from "./definitions/components.js";
 import {
     BlendState,
     ClearColor,
@@ -277,19 +277,6 @@ export function createIndirectBuffer(
     return buffer;
 }
 
-/*
-export function createDebugsBuffer(device: GPUDevice, tint: int): GPUBuffer {
-    const data: Uint32Array = new Uint32Array([tint]);
-    const buffer: GPUBuffer = device.createBuffer({
-        label: "debugsBuffer",
-        size: (1 + 3) * BYTES32,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-    } as GPUBufferDescriptor);
-    device.queue.writeBuffer(buffer, 0, data.buffer);
-    return buffer;
-}
-*/
-
 export function resetIndirectBuffer(
     geometries: Geometry[],
     encoder: GPUCommandEncoder,
@@ -488,20 +475,6 @@ export function createDebugBindGroup(
         entries: bindings,
     } as GPUBindGroupDescriptor);
 }
-
-/*
-export function createDebugsBindGroup(
-    device: GPUDevice,
-    pipeline: GPURenderPipeline,
-    bindings: Iterable<GPUBindGroupEntry>,
-) {
-    return device.createBindGroup({
-        label: "debugsBindGroup",
-        layout: pipeline.getBindGroupLayout(1),
-        entries: bindings,
-    } as GPUBindGroupDescriptor);
-}
-*/
 
 export function baseLevelTexture(texture: GPUTexture): GPUTextureView {
     return texture.createView({
@@ -747,4 +720,31 @@ export function beginDebugPass(
         depthStencilAttachment: depth,
         timestampWrites: timestampWrites,
     } as GPURenderPassDescriptor);
+}
+
+export function formatCSV(data: CSVItem[]): string {
+    if (data.length === 0) {
+        return "";
+    }
+    const headers: string[] = Object.keys(data[0]);
+    const rows: string[] = data.map((item: CSVItem) =>
+        // @ts-ignore
+        headers.map((h: string) => String(item[h] ?? "")).join(","),
+    );
+    return [headers.join(","), ...rows].join("\n");
+}
+
+export function exportCSV(csv: string, filename: string): void {
+    const blob: Blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;",
+    } as BlobPropertyBag);
+    const url: string = URL.createObjectURL(blob);
+    const link: HTMLAnchorElement = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
 }

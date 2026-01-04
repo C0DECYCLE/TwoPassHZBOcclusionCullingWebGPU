@@ -57,6 +57,8 @@ import {
     createSpdPipelinePass,
     createUniformBuffer,
     createVertexBuffer,
+    exportCSV,
+    formatCSV,
     multiDrawIndexedIndirect,
     processGeometries,
     processMeshes,
@@ -168,11 +170,6 @@ const indirectBuffer: GPUBuffer = createIndirectBuffer(
     meshes,
     device,
 );
-/*
-const debugs0Buffer: GPUBuffer = createDebugsBuffer(device, 0);
-const debugs1Buffer: GPUBuffer = createDebugsBuffer(device, 1);
-const debugs2Buffer: GPUBuffer = createDebugsBuffer(device, 2);
-*/
 
 /* Textures and Attachments */
 
@@ -265,23 +262,6 @@ const debugBindGroup: GPUBindGroup = createDebugBindGroup(
     debugPipeline,
     [createBinding(0, uniformBuffer), createBinding(1, hzbTexture)],
 );
-/*
-const debugs0BindGroup: GPUBindGroup = createDebugsBindGroup(
-    device,
-    renderPipeline,
-    [createBinding(0, debugs0Buffer)],
-);
-const debugs1BindGroup: GPUBindGroup = createDebugsBindGroup(
-    device,
-    renderPipeline,
-    [createBinding(0, debugs1Buffer)],
-);
-const debugs2BindGroup: GPUBindGroup = createDebugsBindGroup(
-    device,
-    renderPipeline,
-    [createBinding(0, debugs2Buffer)],
-);
-*/
 
 /* Statistics */
 
@@ -292,6 +272,7 @@ const statistics: Statistics = new Statistics(device, indirectBuffer);
 (window as any).disable = false;
 (window as any).freeze = false;
 (window as any).debug = -1;
+const BENCHMARK: boolean = false;
 
 /* Run */
 const csvData: CSVItem[] = [];
@@ -305,37 +286,33 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 
     /* Update */
 
-    controls.update();
-    /*
-    camera.position.set(Math.sin(0), 0, Math.cos(0)).scale(20);
-    camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
-    camera.position.y = 2.5;
-    if (time > 2000) {
-        if (!started) {
+    let elapsed: float = -1;
+    if (BENCHMARK) {
+        camera.position.set(Math.sin(0), 0, Math.cos(0)).scale(20);
+        camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
+        camera.position.y = 2.5;
+        if (time > 2000 && !started) {
             start = performance.now();
             log("start");
             started = true;
         }
-    }*/
-    let elapsed: float = -1;
-    /*
-    if (started) {
-        elapsed = performance.now() - start;
-        const spin: float = Math.min(elapsed * 0.0003, Math.PI * 2);
-        if (spin >= Math.PI * 2) {
-            if (!stopped) {
+        if (started) {
+            elapsed = performance.now() - start;
+            const spin: float = Math.min(elapsed * 0.0003, Math.PI * 2);
+            if (spin >= Math.PI * 2 && !stopped) {
                 log("stop");
                 stopped = true;
             }
+            camera.position.set(Math.sin(spin), 0, Math.cos(spin)).scale(20);
+            camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
+            camera.position.y = 2.5;
         }
-        camera.position.set(Math.sin(spin), 0, Math.cos(spin)).scale(20);
-        camera.direction.copy(camera.position).cross(new Vec3(0, -1, 0));
-        camera.position.y = 2.5;
+    } else {
+        controls.update();
     }
-    */
+
     updateUniform(uniformDataBuffer, camera, device, uniformBuffer);
 
-    //secondPassColorAttachment.resolveTarget = context.getCurrentTexture();
     debugColorAttachment.resolveTarget = context.getCurrentTexture();
 
     /* Encoder */
@@ -365,7 +342,6 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     );
     firstRenderPass.setPipeline(renderPipeline);
     firstRenderPass.setBindGroup(0, renderBindGroup);
-    //firstRenderPass.setBindGroup(1, debugs1BindGroup);
     firstRenderPass.setIndexBuffer(indexBuffer, IndexFormat);
     multiDrawIndexedIndirect(geometries, firstRenderPass, indirectBuffer);
     firstRenderPass.end();
@@ -429,7 +405,6 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     if ((window as any).freeze !== true) {
         secondRenderPass.setPipeline(renderPipeline);
         secondRenderPass.setBindGroup(0, renderBindGroup);
-        //secondRenderPass.setBindGroup(1, debugs2BindGroup);
         secondRenderPass.setIndexBuffer(indexBuffer, IndexFormat);
         multiDrawIndexedIndirect(geometries, secondRenderPass, indirectBuffer);
     }
@@ -461,14 +436,15 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
     /* Statistics */
 
     statistics.update(elapsed, time).then((item: CSVItem) => {
-        if (stopped) {
-            if (!exported) {
-                const variant: string = (window as any).disable
-                    ? "frustumOnly"
-                    : "twoPass";
-                exportCSV(formatCSV(csvData), `data_${variant}.csv`);
-                exported = true;
-            }
+        if (!BENCHMARK) {
+            return;
+        }
+        if (stopped && !exported) {
+            const variant: string = (window as any).disable
+                ? "frustumOnly"
+                : "twoPass";
+            exportCSV(formatCSV(csvData), `data_${variant}.csv`);
+            exported = true;
             return;
         }
         if (started) {
@@ -482,30 +458,3 @@ function frameRequestCallback(time: DOMHighResTimeStamp): void {
 }
 
 requestAnimationFrame(frameRequestCallback);
-
-function formatCSV(data: CSVItem[]): string {
-    if (data.length === 0) {
-        return "";
-    }
-    const headers: string[] = Object.keys(data[0]);
-    const rows: string[] = data.map((item: CSVItem) =>
-        // @ts-ignore
-        headers.map((h: string) => String(item[h] ?? "")).join(","),
-    );
-    return [headers.join(","), ...rows].join("\n");
-}
-
-function exportCSV(csv: string, filename: string): void {
-    const blob: Blob = new Blob([csv], {
-        type: "text/csv;charset=utf-8;",
-    } as BlobPropertyBag);
-    const url: string = URL.createObjectURL(blob);
-    const link: HTMLAnchorElement = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.style.display = "none";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}

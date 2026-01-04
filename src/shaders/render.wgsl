@@ -40,12 +40,6 @@ struct Vertex {
     position: vec3f,
 };
 
-/*
-struct Debugs {
-    tint: u32,
-};
-*/
-
 struct Result {
     @builtin(position) clipspace: vec4f,
     @interpolate(flat) @location(0) color: vec3f,
@@ -55,7 +49,6 @@ struct Result {
 @group(0) @binding(1) var<storage, read> pending: array<u32>;
 @group(0) @binding(2) var<storage, read> meshes: array<Mesh>;
 @group(0) @binding(3) var<storage, read> vertices: array<Vertex>;
-//@group(1) @binding(0) var<uniform> debugs: Debugs;
 
 @vertex fn vs(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) instanceIndex: u32) -> Result {
     let camera: Camera = uniforms.camera;
@@ -68,16 +61,7 @@ struct Result {
 }
 
 @fragment fn fs(@builtin(primitive_index) primitiveIndex: u32, vertex: Result) -> @location(0) vec4f {    
-    //return vec4f(0.5, 0, 0, 0.25);
     return vec4f(mix(vertex.color, random(f32(primitiveIndex)), 0.25), 1);
-    /*
-    switch debugs.tint {
-        case 0: { return vec4f(mix(vertex.color, random(f32(primitiveIndex)), 0.25), 1); }
-        case 1: { return vec4f(0, 0, 1, 1); }
-        case 2: { return vec4f(1, 1, 0, 1); }
-        default: { return vec4f(0, 0, 0, 1); }
-    }
-    */
 }
 
 fn random(value: f32) -> vec3f {
